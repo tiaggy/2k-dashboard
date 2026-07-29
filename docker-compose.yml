@@ -1,0 +1,30 @@
+# Run:  docker compose up -d --build
+# Logs: docker compose logs -f
+#
+# This is a real web page, so it DOES publish a port — bound to 127.0.0.1
+# only by default. See README.md for why (a published port bypasses UFW
+# unless bound to loopback or fronted properly) and how to expose it further
+# (reverse proxy / SSH tunnel / Tailscale) if you want it reachable beyond
+# this host.
+services:
+  dashboard:
+    build: .
+    image: 2k-dashboard:latest
+    container_name: 2k-dashboard
+    restart: unless-stopped
+    env_file: .env            # secrets + toggles (never committed)
+    environment:
+      - TZ=${TZ:-Europe/Kyiv}   # week boundaries are computed in local time
+      - STATE_DIR=/data
+    volumes:
+      - dashboard-state:/data  # the SQLite freeze-cache (dashboard_cache.db)
+    ports:
+      - "127.0.0.1:8000:8000"  # loopback only — see README.md
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  dashboard-state:

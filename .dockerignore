@@ -1,0 +1,19 @@
+# Secrets — never bake into the image (passed at runtime via env_file)
+.env
+.env.*
+
+# Runtime state (persisted on the /data volume, not in the image)
+dashboard_cache.db
+*.out
+
+# Python / VCS / docs
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.git
+.gitignore
+*.md
+Dockerfile
+docker-compose.yml
+.dockerignore

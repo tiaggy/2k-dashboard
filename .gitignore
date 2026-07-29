@@ -1,0 +1,13 @@
+# Secrets & local config — NEVER commit
+.env
+
+# Runtime data (persisted on the /data volume, not in the repo)
+dashboard_cache.db
+*.out
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
