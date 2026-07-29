@@ -81,9 +81,28 @@ ssh -L 8000:localhost:8000 you@your-server
 ```
 
 **A team, over the internet:** put a real reverse proxy (Caddy, nginx) in
-front, terminating TLS on 443 (which you *do* open in UFW) and proxying to
-`127.0.0.1:8000`. The dashboard's own token gate is a shared secret, not a
-substitute for TLS if you're exposing this beyond a loopback/SSH tunnel.
+front, terminating TLS on 443 (which you *do* open in UFW). The dashboard's
+own token gate is a shared secret, not a substitute for TLS if you're
+exposing this beyond a loopback/SSH tunnel.
+
+If the proxy also runs in Docker, the tighter setup is to skip the host port
+entirely and join it to this project's Docker network instead of proxying to
+`127.0.0.1:8000`:
+```yaml
+# in the proxy's own compose file
+networks:
+  default:
+    external: true
+    name: 2k-dashboard_default   # matches this repo's compose project name
+```
+then `reverse_proxy dashboard:8000` (the compose *service* name, not the
+container name — Docker's DNS resolves both, but the service name is the more
+reliable one to depend on). With that working, `ports: ["127.0.0.1:8000:8000"]`
+in this repo's `docker-compose.yml` becomes unnecessary — remove it and the
+dashboard isn't reachable from the host at all anymore, not even via
+`127.0.0.1` from someone SSH'd into the box. The proxy becomes the only way
+in. The tradeoff: the SSH-tunnel option above stops working, since nothing's
+bound to the host's loopback anymore.
 
 **A team, without exposing anything publicly:** put the host on a
 [Tailscale](https://tailscale.com/) (or similar) network and change the
