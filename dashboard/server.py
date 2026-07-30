@@ -16,6 +16,7 @@ import asyncio
 import datetime as dt
 import os
 import threading
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Header, HTTPException, Request
@@ -32,6 +33,10 @@ _STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 
 _state_lock = threading.Lock()
 _state: dict = {"snapshot": None, "error": None}
+# {(group_id, account_id, date_iso): (code, expires_at_monotonic)} — recently
+# manually-edited cells, overriding whatever a fresh recompute finds for that
+# exact cell until they expire. See DASHBOARD_EDIT_PIN_SECONDS.
+_pins: dict = {}
 
 
 def _all_years(records: dict) -> list:
@@ -57,18 +62,36 @@ def _year_weeks(year: int) -> list:
     return weeks
 
 
-def _compute_week_table(group_records: dict, accounts: dict, week: dt.date) -> dict:
+def _compute_week_table(group_id: str, group_records: dict, accounts: dict, week: dt.date,
+                        pins: dict) -> dict:
     """group_records: {account_pid: {date: set(intents)}} for ONE group."""
     days = [week + dt.timedelta(days=i) for i in range(7)]
     day_isos = [d.isoformat() for d in days]
+    now = time.monotonic()
+    # A pinned account might have no records at all yet (the recompute raced
+    # ahead of Notion's write becoming queryable) — make sure it still gets a
+    # row so its pin has somewhere to apply.
+    pinned_apids = {apid for (gpid, apid, d_iso) in pins if gpid == group_id and d_iso in day_isos}
     workers = []
-    for apid, by_day in group_records.items():
+    for apid in set(group_records) | pinned_apids:
+        by_day = group_records.get(apid, {})
         week_codes = {}
         for d in days:
             intents = by_day.get(d)
             if intents:
                 code, _ = attendance.day_code(intents)
                 week_codes[d.isoformat()] = code
+        for d_iso in day_isos:
+            pin = pins.get((group_id, apid, d_iso))
+            if pin is None:
+                continue
+            code, expires_at = pin
+            if now >= expires_at:
+                continue
+            if code:
+                week_codes[d_iso] = code
+            else:
+                week_codes.pop(d_iso, None)
         if not week_codes:
             continue  # this worker wasn't active this particular week
         acc = accounts.get(apid, {})
@@ -79,7 +102,7 @@ def _compute_week_table(group_records: dict, accounts: dict, week: dt.date) -> d
 
 
 def _year_snapshot(year: int, today: dt.date, groups: dict, accounts: dict,
-                   records: dict, approvals: dict) -> dict:
+                   records: dict, approvals: dict, pins: dict) -> dict:
     full_year_weeks = _year_weeks(year)  # already chronological, Jan -> Dec
     teams = []
     for gpid, ginfo in groups.items():
@@ -97,7 +120,7 @@ def _year_snapshot(year: int, today: dt.date, groups: dict, accounts: dict,
             ws_iso = week.isoformat()
             approved = approvals.get((gpid, ws_iso), False)
             if not approved or not cache.has(gpid, ws_iso):
-                table = _compute_week_table(group_records, accounts, week)
+                table = _compute_week_table(gpid, group_records, accounts, week, pins)
                 cache.put(gpid, ws_iso, table)
             else:
                 table = cache.get(gpid, ws_iso)
@@ -122,10 +145,12 @@ def compute_snapshot() -> dict:
     accounts = notion_data.load_accounts()
     records = notion_data.load_records()
     approvals = notionapprovals.load()
+    with _state_lock:
+        pins = dict(_pins)  # snapshot once — this runs on a background thread
 
     today = dt.date.today()
     available_years = _all_years(records)
-    years = {str(y): _year_snapshot(y, today, groups, accounts, records, approvals) for y in available_years}
+    years = {str(y): _year_snapshot(y, today, groups, accounts, records, approvals, pins) for y in available_years}
 
     return {
         "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
@@ -289,6 +314,18 @@ async def api_edit_day(request: Request, x_approve_token: str = Header(default="
         )
         if not ok:
             raise HTTPException(status_code=502, detail=f"failed to write to Notion: {detail}")
+
+    # Pin this cell so a background refresh can't clobber it with a stale
+    # blank/prior value for a while — Notion's own read-after-write isn't
+    # instant, so a recompute that races right after this write might not
+    # see it yet. Opportunistically drop expired pins while we're in here
+    # rather than running a separate cleanup pass.
+    if config.DASHBOARD_EDIT_PIN_SECONDS > 0:
+        with _state_lock:
+            now = time.monotonic()
+            for key in [k for k, (_, exp) in _pins.items() if exp <= now]:
+                del _pins[key]
+            _pins[(group_id, account_id, date_str)] = (code, now + config.DASHBOARD_EDIT_PIN_SECONDS)
 
     # Reflect immediately in the in-memory snapshot rather than waiting for the
     # next refresh cycle (which can take a minute — the full Capture Log pull

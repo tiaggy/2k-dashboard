@@ -123,6 +123,12 @@ DASHBOARD_REFRESH_SECONDS: int = int(os.getenv("DASHBOARD_REFRESH_SECONDS", "60"
 # week, and editing a day cell. Leave unset and the dashboard has no data
 # access at all — it fails closed, not open.
 DASHBOARD_APPROVE_TOKEN: str = os.getenv("DASHBOARD_APPROVE_TOKEN", "").strip()
+# How long a manually-edited cell keeps showing its just-assigned value even
+# if a background refresh recomputes that week in the meantime — covers the
+# window where the edit has landed in Notion but a fresh query hasn't caught
+# up to it yet (Notion's own read-after-write lag), so a refresh can't
+# briefly show the cell blank/stale right after you fixed it.
+DASHBOARD_EDIT_PIN_SECONDS: int = int(os.getenv("DASHBOARD_EDIT_PIN_SECONDS", "120"))
 
 
 def require_token() -> str:
