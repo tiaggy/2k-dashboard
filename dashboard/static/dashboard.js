@@ -70,12 +70,7 @@
   function dayCell(code, dateIso, colors, editCtx, legend, preStart) {
     const td = document.createElement("td");
     td.className = "day-cell" + (isWeekend(dateIso) || preStart ? " weekend" : "");
-    if (code) {
-      td.classList.add("has-code");
-      td.textContent = code;
-      const c = colors[code];
-      if (c) { td.style.background = c.fill; td.style.color = c.font; }
-    }
+    if (code) applyCellVisual(td, code, colors);
     if (editCtx) {
       td.classList.add("editable");
       td.title = "Click to set this day's status";
@@ -366,14 +361,14 @@
       sw.style.color = colors[code].font;
       opt.appendChild(sw);
       opt.appendChild(document.createTextNode(label));
-      opt.addEventListener("click", () => { closePicker(); submitEdit(ctx, code); });
+      opt.addEventListener("click", () => { closePicker(); submitEdit(ctx, code, cellEl, colors); });
       picker.appendChild(opt);
     }
     const clearOpt = document.createElement("button");
     clearOpt.type = "button";
     clearOpt.className = "edit-picker-opt edit-picker-clear";
     clearOpt.textContent = "— No record (clear) —";
-    clearOpt.addEventListener("click", () => { closePicker(); submitEdit(ctx, ""); });
+    clearOpt.addEventListener("click", () => { closePicker(); submitEdit(ctx, "", cellEl, colors); });
     picker.appendChild(clearOpt);
 
     document.body.appendChild(picker);
@@ -396,7 +391,21 @@
     }, 0);
   }
 
-  async function submitEdit(ctx, code) {
+  function applyCellVisual(td, code, colors) {
+    td.classList.toggle("has-code", !!code);
+    td.textContent = code || "";
+    const c = code && colors[code];
+    td.style.background = c ? c.fill : "";
+    td.style.color = c ? c.font : "";
+  }
+
+  async function submitEdit(ctx, code, cellEl, colors) {
+    // Reflect the change immediately, before the network round-trip — the
+    // Notion write (archive + create) takes a real moment, and waiting for
+    // fetchData() to come back afterward made every edit feel laggy. Revert
+    // on any failure path below.
+    const prevCode = ctx.code;
+    if (cellEl) applyCellVisual(cellEl, code, colors);
     try {
       const token = localStorage.getItem(TOKEN_KEY) || "";
       const res = await fetch("/api/edit-day", {
@@ -405,20 +414,24 @@
         body: JSON.stringify({ group_id: ctx.groupId, account_id: ctx.accountId, date: ctx.dateIso, code }),
       });
       if (res.status === 401) {
-        showTokenBanner(() => submitEdit(ctx, code));
+        if (cellEl) applyCellVisual(cellEl, prevCode, colors);
+        showTokenBanner(() => submitEdit(ctx, code, cellEl, colors));
         return;
       }
       if (res.status === 403) {
+        if (cellEl) applyCellVisual(cellEl, prevCode, colors);
         alert("Editing is disabled on this server (no token configured).");
         return;
       }
       if (!res.ok) {
+        if (cellEl) applyCellVisual(cellEl, prevCode, colors);
         const d = await res.json().catch(() => ({}));
         alert("Failed: " + (d.detail || res.status));
         return;
       }
       await fetchData();
     } catch (err) {
+      if (cellEl) applyCellVisual(cellEl, prevCode, colors);
       alert("Failed: " + err);
     }
   }
