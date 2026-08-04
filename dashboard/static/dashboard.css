@@ -180,7 +180,9 @@ body {
   left: 0;
   z-index: 2;
   background: var(--surface-raised);
+  cursor: pointer;
 }
+.team-table .worker-name:hover { text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 2px; }
 .team-table tbody tr:hover td { background: color-mix(in srgb, var(--accent) 5%, transparent); }
 .team-table tbody tr:hover .worker-name { background: color-mix(in srgb, var(--accent) 8%, var(--surface-raised)); }
 
@@ -229,6 +231,38 @@ body {
   font-weight: 700; font-size: 10.5px;
 }
 .edit-picker-clear { color: var(--text-muted); border-top: 1px solid var(--border); margin-top: 3px; padding-top: 7px; border-radius: 0 0 5px 5px; }
+
+.info-card {
+  position: absolute;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  border-radius: 8px;
+  padding: 10px;
+  z-index: 30;
+  min-width: 200px;
+}
+.info-card-title {
+  font-weight: 700;
+  font-size: 13px;
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.info-card-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 12.5px;
+}
+.info-card-swatch {
+  width: 20px; height: 20px; border-radius: 5px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 10.5px;
+}
+.info-card-label { flex: 1; color: var(--text-secondary); }
+.info-card-count { font-weight: 700; min-width: 1.5em; text-align: right; }
 
 .empty-note { color: var(--text-muted); font-size: 13px; padding: 24px 4px; }
 

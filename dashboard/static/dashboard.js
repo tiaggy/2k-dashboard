@@ -171,6 +171,11 @@
       const nameTd = document.createElement("td");
       nameTd.className = "worker-name";
       nameTd.textContent = name;
+      nameTd.title = "Click for a summary of this year's days";
+      nameTd.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openInfoCard(nameTd, team, name, colors, legend);
+      });
       tr.appendChild(nameTd);
       const accountId = accountIdByName.get(name);
       const startIso = firstDate.get(name);
@@ -346,6 +351,74 @@
     if (e.key === "Escape") closePicker();
   }
 
+  // Positions a floating popover (edit-picker or info-card — only one open at
+  // a time, via openPicker/closePicker above) below its anchor, flipping
+  // above or clamping horizontally if it would overflow the viewport.
+  function showPopover(popoverEl, anchorEl) {
+    document.body.appendChild(popoverEl);
+    const r = anchorEl.getBoundingClientRect();
+    const pr = popoverEl.getBoundingClientRect();
+    let left = r.left + window.scrollX;
+    const maxLeft = window.scrollX + window.innerWidth - pr.width - 8;
+    if (left > maxLeft) left = Math.max(8, maxLeft);
+    let top = r.bottom + window.scrollY + 4;
+    if (top + pr.height > window.scrollY + window.innerHeight) {
+      top = r.top + window.scrollY - pr.height - 4;
+    }
+    popoverEl.style.left = left + "px";
+    popoverEl.style.top = top + "px";
+    openPicker = popoverEl;
+
+    setTimeout(() => {
+      document.addEventListener("click", onDocClickClosePicker, true);
+      document.addEventListener("keydown", onDocKeyClosePicker, true);
+    }, 0);
+  }
+
+  function tallyForWorker(team, name) {
+    const counts = {};
+    for (const week of team.weeks) {
+      for (const w of week.table.workers) {
+        if (w.name !== name) continue;
+        for (const code of Object.values(w.days)) {
+          counts[code] = (counts[code] || 0) + 1;
+        }
+      }
+    }
+    return counts;
+  }
+
+  function openInfoCard(anchorEl, team, name, colors, legend) {
+    closePicker();
+    const counts = tallyForWorker(team, name);
+    const card = document.createElement("div");
+    card.className = "info-card";
+    const title = document.createElement("div");
+    title.className = "info-card-title";
+    title.textContent = name;
+    card.appendChild(title);
+    for (const [code, label] of legend) {
+      const row = document.createElement("div");
+      row.className = "info-card-row";
+      const sw = document.createElement("span");
+      sw.className = "info-card-swatch";
+      sw.textContent = code;
+      sw.style.background = colors[code].fill;
+      sw.style.color = colors[code].font;
+      row.appendChild(sw);
+      const labelSpan = document.createElement("span");
+      labelSpan.className = "info-card-label";
+      labelSpan.textContent = label;
+      row.appendChild(labelSpan);
+      const countSpan = document.createElement("span");
+      countSpan.className = "info-card-count";
+      countSpan.textContent = String(counts[code] || 0);
+      row.appendChild(countSpan);
+      card.appendChild(row);
+    }
+    showPopover(card, anchorEl);
+  }
+
   function openEditPicker(cellEl, ctx, legend, colors) {
     closePicker();
     const picker = document.createElement("div");
@@ -371,24 +444,7 @@
     clearOpt.addEventListener("click", () => { closePicker(); submitEdit(ctx, "", cellEl, colors); });
     picker.appendChild(clearOpt);
 
-    document.body.appendChild(picker);
-    const r = cellEl.getBoundingClientRect();
-    const pr = picker.getBoundingClientRect();
-    let left = r.left + window.scrollX;
-    const maxLeft = window.scrollX + window.innerWidth - pr.width - 8;
-    if (left > maxLeft) left = Math.max(8, maxLeft);
-    let top = r.bottom + window.scrollY + 4;
-    if (top + pr.height > window.scrollY + window.innerHeight) {
-      top = r.top + window.scrollY - pr.height - 4;
-    }
-    picker.style.left = left + "px";
-    picker.style.top = top + "px";
-    openPicker = picker;
-
-    setTimeout(() => {
-      document.addEventListener("click", onDocClickClosePicker, true);
-      document.addEventListener("keydown", onDocKeyClosePicker, true);
-    }, 0);
+    showPopover(picker, cellEl);
   }
 
   function applyCellVisual(td, code, colors) {
