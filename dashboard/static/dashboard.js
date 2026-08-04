@@ -67,9 +67,9 @@
     }
   }
 
-  function dayCell(code, dateIso, colors, editCtx, legend, preStart) {
+  function dayCell(code, dateIso, colors, editCtx, legend, preStart, todayIso) {
     const td = document.createElement("td");
-    td.className = "day-cell" + (isWeekend(dateIso) || preStart ? " weekend" : "");
+    td.className = "day-cell" + (isWeekend(dateIso) || preStart ? " weekend" : "") + (dateIso === todayIso ? " today-col" : "");
     if (code) applyCellVisual(td, code, colors);
     if (editCtx) {
       td.classList.add("editable");
@@ -82,7 +82,7 @@
     return td;
   }
 
-  function buildTeamTable(node, team, colors, legend) {
+  function buildTeamTable(node, team, colors, legend, todayIso) {
     const weekHeaderRow = node.querySelector(".week-header-row");
     const daynumRow = node.querySelector(".daynum-row");
     const dowRow = node.querySelector(".dow-row");
@@ -143,19 +143,23 @@
       weekHeaderRow.appendChild(th);
 
       week.table.days.forEach((iso, i) => {
+        const isToday = iso === todayIso;
         const numTh = document.createElement("th");
-        numTh.className = "daynum-cell" + (i === 0 ? " week-start-border" : "");
+        numTh.className = "daynum-cell" + (i === 0 ? " week-start-border" : "") + (isToday ? " today-col today-col-top" : "");
         numTh.textContent = fmtDay(iso);
         daynumRow.appendChild(numTh);
 
         const dth = document.createElement("th");
-        dth.className = "dow-cell" + (i === 0 ? " week-start-border" : "");
+        dth.className = "dow-cell" + (i === 0 ? " week-start-border" : "") + (isToday ? " today-col" : "");
         dth.textContent = DOW[i];
         dowRow.appendChild(dth);
       });
     }
 
     if (names.length === 0) {
+      // Nothing to close the today-column rectangle at the bottom with —
+      // close it off at the header instead so it doesn't look cut open.
+      dowRow.querySelectorAll(".today-col").forEach((th) => th.classList.add("today-col-bottom"));
       const tr = document.createElement("tr");
       const td = document.createElement("td");
       td.className = "empty-note";
@@ -166,7 +170,8 @@
       return;
     }
 
-    for (const name of names) {
+    names.forEach((name, rowIdx) => {
+      const isLastRow = rowIdx === names.length - 1;
       const tr = document.createElement("tr");
       const nameTd = document.createElement("td");
       nameTd.className = "worker-name";
@@ -184,13 +189,14 @@
         const editCtx = week.approved ? null : { groupId: team.group_id, accountId };
         week.table.days.forEach((iso, i) => {
           const preStart = !!startIso && iso < startIso;
-          const td = dayCell(days ? days[iso] : null, iso, colors, editCtx, legend, preStart);
+          const td = dayCell(days ? days[iso] : null, iso, colors, editCtx, legend, preStart, todayIso);
           if (i === 0) td.classList.add("week-start-border");
+          if (isLastRow && iso === todayIso) td.classList.add("today-col-bottom");
           tr.appendChild(td);
         });
       }
       tbody.appendChild(tr);
-    }
+    });
   }
 
   function centerOnCurrentWeek(node, currentWeekStart) {
@@ -230,7 +236,7 @@
       const node = tmplTeam.content.firstElementChild.cloneNode(true);
       node.dataset.groupId = team.group_id;
       node.querySelector(".team-label").textContent = team.label;
-      buildTeamTable(node, team, data.colors, data.legend);
+      buildTeamTable(node, team, data.colors, data.legend, data.today);
       teamsEl.appendChild(node);
       if (shouldCenter) {
         centerOnCurrentWeek(node, yearData.current_week_start);

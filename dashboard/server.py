@@ -154,6 +154,7 @@ def compute_snapshot() -> dict:
 
     return {
         "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "today": today.isoformat(),
         "available_years": available_years,
         "years": years,
         "legend": attendance.LEGEND,

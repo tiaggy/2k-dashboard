@@ -172,6 +172,17 @@ body {
 
 .week-start-border { border-left: 2px solid var(--border); }
 
+/* Today's column: a red rectangle from the day-number header down through
+   every worker's cell for that date. Left/right on every cell in the column
+   (border-collapse: separate + border-spacing: 0 means adjacent cells' edges
+   touch, so this reads as one continuous line, not a grid), top on the
+   day-number header only, bottom on the last row (see JS for how that's
+   picked). Wins over .week-start-border's gray when today is a Monday —
+   defined later, same specificity, so the cascade favors this one. */
+.today-col { border-left: 2px solid #e5484d; border-right: 2px solid #e5484d; }
+.today-col-top { border-top: 2px solid #e5484d; }
+.today-col-bottom { border-bottom: 2px solid #e5484d; }
+
 .team-table .worker-name {
   text-align: left;
   font-weight: 600;
