@@ -48,6 +48,12 @@ this dashboard owns — create it yourself with this schema before setting
 | Week Start | Date |
 | Approved | Checkbox |
 
+The dashboard also expects a **Hidden** checkbox property on the Telegram
+Accounts database, used by its per-worker show/hide feature — add it
+yourself if it isn't already there (it isn't created by the bot). A
+missing property just means nobody can be hidden yet; the dashboard
+doesn't fail without it.
+
 ## Running
 
 ```bash
@@ -119,7 +125,7 @@ govern container ports, install
 
 | File | What it is |
 |---|---|
-| `dashboard/server.py` | FastAPI app: background refresh loop, `/api/data`, `/api/approve`, `/api/edit-day` |
+| `dashboard/server.py` | FastAPI app: background refresh loop, `/api/data`, `/api/approve`, `/api/edit-day`, `/api/toggle-hidden` |
 | `dashboard/notion_data.py` | Reads (groups, accounts, Capture Log records) — self-contained, doesn't assume any 2k-grouper-specific helpers |
 | `dashboard/cache.py` | Local SQLite cache of computed week tables for approved (frozen) weeks |
 | `dashboard/static/` | Vanilla HTML/JS/CSS frontend — no framework, no build step |
