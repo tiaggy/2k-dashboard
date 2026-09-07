@@ -13,6 +13,14 @@ not approved, any day cell can be corrected by hand — this writes a real,
 permanent change back to the Capture Log (the exact same database the bot
 writes to), not a dashboard-only override.
 
+The header shows two live status lights, **Notion** and **AI**, on their own
+faster independent check (`DASHBOARD_HEALTH_CHECK_SECONDS`, default 30s) —
+whether they're reachable right now, not whether the last data refresh
+happened to succeed. The AI one is a cheap "list models" reachability probe
+against the same OpenAI-compatible endpoint the bot's classifier uses (see
+`.env.example`) — the dashboard itself has no other use for AI at all, this
+is purely a diagnostic indicator.
+
 ## Auth model
 
 Everything that touches real attendance data — viewing (`/api/data`),
@@ -134,6 +142,7 @@ govern container ports, install
 | `dashboard/server.py` | FastAPI app: background refresh loop, `/api/data`, `/api/approve`, `/api/edit-day`, `/api/toggle-hidden`, `/api/toggle-paused` |
 | `dashboard/notion_data.py` | Reads (groups, accounts, Capture Log records) — self-contained, doesn't assume any 2k-grouper-specific helpers |
 | `dashboard/cache.py` | Local SQLite cache of computed week tables for approved (frozen) weeks |
+| `dashboard/health.py` | Notion/AI reachability checks for the header's status lights |
 | `dashboard/static/` | Vanilla HTML/JS/CSS frontend — no framework, no build step |
 | `notion.py`, `notion_http.py` | Capture Log reads/writes + shared HTTP retry policy — copied from 2k-grouper as-is |
 | `notionapprovals.py` | Reads/writes the Week Approvals database |

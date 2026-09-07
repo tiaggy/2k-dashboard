@@ -129,6 +129,12 @@ DASHBOARD_APPROVE_TOKEN: str = os.getenv("DASHBOARD_APPROVE_TOKEN", "").strip()
 # up to it yet (Notion's own read-after-write lag), so a refresh can't
 # briefly show the cell blank/stale right after you fixed it.
 DASHBOARD_EDIT_PIN_SECONDS: int = int(os.getenv("DASHBOARD_EDIT_PIN_SECONDS", "120"))
+# How often the header's Notion/AI availability indicators re-check —
+# deliberately independent of and much faster than DASHBOARD_REFRESH_SECONDS,
+# since "is it up right now" is more time-sensitive than the full attendance
+# re-pull. Both checks are cheap (a quick Notion probe, an OpenAI "list
+# models" call) so a short interval is fine.
+DASHBOARD_HEALTH_CHECK_SECONDS: int = int(os.getenv("DASHBOARD_HEALTH_CHECK_SECONDS", "30"))
 
 
 def require_token() -> str:

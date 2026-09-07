@@ -27,12 +27,17 @@ import attendance
 import config
 import notion
 import notionapprovals
-from dashboard import cache, notion_data
+from dashboard import cache, health, notion_data
 
 _STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 
 _state_lock = threading.Lock()
-_state: dict = {"snapshot": None, "error": None}
+_state: dict = {
+    "snapshot": None,
+    "error": None,
+    # 'ok' | 'down' | 'unconfigured' | 'unknown' (before the first check runs)
+    "health": {"notion": "unknown", "ai": "unknown", "checked_at": None},
+}
 # {(group_id, account_id, date_iso): (code, expires_at_monotonic)} — recently
 # manually-edited cells, overriding whatever a fresh recompute finds for that
 # exact cell until they expire. See DASHBOARD_EDIT_PIN_SECONDS.
@@ -179,11 +184,32 @@ async def _refresh_loop() -> None:
         await asyncio.sleep(config.DASHBOARD_REFRESH_SECONDS)
 
 
+async def _health_loop() -> None:
+    """Separate, much faster loop than _refresh_loop — whether Notion/AI are
+    reachable right now shouldn't have to wait behind the slow Capture Log
+    pull to update."""
+    while True:
+        try:
+            notion_status = await asyncio.to_thread(health.check_notion)
+            ai_status = await asyncio.to_thread(health.check_ai)
+            with _state_lock:
+                _state["health"] = {
+                    "notion": notion_status,
+                    "ai": ai_status,
+                    "checked_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+                }
+        except Exception as exc:
+            print(f"[dashboard] health check failed: {exc!r}")
+        await asyncio.sleep(config.DASHBOARD_HEALTH_CHECK_SECONDS)
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
-    task = asyncio.create_task(_refresh_loop())
+    refresh_task = asyncio.create_task(_refresh_loop())
+    health_task = asyncio.create_task(_health_loop())
     yield
-    task.cancel()
+    refresh_task.cancel()
+    health_task.cancel()
 
 
 app = FastAPI(title="2K Attendance Dashboard", lifespan=_lifespan)
@@ -212,10 +238,13 @@ def index():
 def api_data(x_approve_token: str = Header(default="")):
     _require_token(x_approve_token)
     with _state_lock:
-        snapshot, error = _state["snapshot"], _state["error"]
+        snapshot, error, health_status = _state["snapshot"], _state["error"], _state["health"]
     if snapshot is None:
-        return JSONResponse({"error": error or "not ready yet"}, status_code=503)
+        # Surface health even before the first (slow) full snapshot lands —
+        # useful for diagnosing why it's taking a while.
+        return JSONResponse({"error": error or "not ready yet", "health": health_status}, status_code=503)
     payload = dict(snapshot)
+    payload["health"] = health_status
     if error:
         payload["stale_error"] = error  # last refresh failed; still serving the prior good snapshot
     return payload

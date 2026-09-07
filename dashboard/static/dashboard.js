@@ -9,6 +9,8 @@
   const legendEl = document.getElementById("legend");
   const statusPill = document.getElementById("status-pill");
   const generatedAtEl = document.getElementById("generated-at");
+  const healthNotionEl = document.getElementById("health-notion");
+  const healthAiEl = document.getElementById("health-ai");
   const yearSelect = document.getElementById("year-select");
   const tmplTeam = document.getElementById("tmpl-team");
 
@@ -283,6 +285,21 @@
     statusPill.textContent = text;
   }
 
+  const HEALTH_KIND = { ok: "ok", down: "error", unconfigured: "loading", unknown: "loading" };
+  function setHealthPill(el, label, status) {
+    const kind = HEALTH_KIND[status] || "loading";
+    el.className = "status-pill status-" + kind;
+    el.textContent = label;
+    el.title = status === "unconfigured" ? label + ": not configured on the server"
+      : status === "unknown" ? label + ": checking…"
+      : label + ": " + status;
+  }
+  function renderHealth(healthData) {
+    if (!healthData) return;
+    setHealthPill(healthNotionEl, "Notion", healthData.notion);
+    setHealthPill(healthAiEl, "AI", healthData.ai);
+  }
+
   let lastData = null;
 
   async function fetchData() {
@@ -299,6 +316,7 @@
         return;
       }
       const data = await res.json();
+      renderHealth(data.health);  // available even in the 503 "not ready yet" case below
       if (!res.ok) {
         setStatus("error", data.error || "error");
         return;
