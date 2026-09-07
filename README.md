@@ -48,11 +48,17 @@ this dashboard owns — create it yourself with this schema before setting
 | Week Start | Date |
 | Approved | Checkbox |
 
-The dashboard also expects a **Hidden** checkbox property on the Telegram
-Accounts database, used by its per-worker show/hide feature — add it
-yourself if it isn't already there (it isn't created by the bot). A
-missing property just means nobody can be hidden yet; the dashboard
-doesn't fail without it.
+The dashboard also expects two checkbox properties on the Telegram Accounts
+database, neither created by the bot — add them yourself if they aren't
+already there:
+
+| Property | Used for |
+|---|---|
+| Hidden | Dashboard-only display filter — the bot keeps capturing normally either way |
+| Paused | Stops the **bot itself** from capturing new messages for that person (needs the companion change in [tiaggy/2k-grouper](https://github.com/tiaggy/2k-grouper) to actually take effect — the dashboard can flip the checkbox regardless, but only a bot that reads it will act on it) |
+
+Missing either property just means nobody can be hidden/paused yet; the
+dashboard doesn't fail without them.
 
 ## Running
 
@@ -125,7 +131,7 @@ govern container ports, install
 
 | File | What it is |
 |---|---|
-| `dashboard/server.py` | FastAPI app: background refresh loop, `/api/data`, `/api/approve`, `/api/edit-day`, `/api/toggle-hidden` |
+| `dashboard/server.py` | FastAPI app: background refresh loop, `/api/data`, `/api/approve`, `/api/edit-day`, `/api/toggle-hidden`, `/api/toggle-paused` |
 | `dashboard/notion_data.py` | Reads (groups, accounts, Capture Log records) — self-contained, doesn't assume any 2k-grouper-specific helpers |
 | `dashboard/cache.py` | Local SQLite cache of computed week tables for approved (frozen) weeks |
 | `dashboard/static/` | Vanilla HTML/JS/CSS frontend — no framework, no build step |
