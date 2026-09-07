@@ -61,10 +61,12 @@ def _row_date(props: dict) -> dt.date | None:
 
 
 def load_accounts() -> dict:
-    """{page_id: {'name': str|None, 'username': str|None, 'hidden': bool}}.
-    `hidden` is a manual per-person flag (Telegram Accounts -> Hidden
-    checkbox) letting someone be excluded from the dashboard's tables
-    without touching their real attendance data."""
+    """{page_id: {'name': str|None, 'username': str|None, 'hidden': bool,
+    'paused': bool}}. `hidden` is a dashboard-only display filter (their real
+    attendance data is untouched). `paused` is a different thing entirely:
+    the bot itself stops capturing new messages for this person (Telegram
+    Accounts -> Paused checkbox) — their history stays exactly as it is,
+    nothing new gets added while paused."""
     out: dict = {}
     if not config.NOTION_ACCOUNTS_DB_ID:
         return out
@@ -73,7 +75,8 @@ def load_accounts() -> dict:
         name = "".join(t.get("plain_text", "") for t in (p.get("Name", {}).get("title") or []))
         username = "".join(t.get("plain_text", "") for t in (p.get("Username", {}).get("rich_text") or []))
         hidden = bool((p.get("Hidden", {}) or {}).get("checkbox"))
-        out[pg["id"]] = {"name": name or None, "username": username or None, "hidden": hidden}
+        paused = bool((p.get("Paused", {}) or {}).get("checkbox"))
+        out[pg["id"]] = {"name": name or None, "username": username or None, "hidden": hidden, "paused": paused}
     return out
 
 
@@ -87,6 +90,21 @@ def set_hidden(account_id: str, hidden: bool) -> bool:
         return r.status_code == 200
     except Exception as exc:
         print(f"[notion_data] set_hidden failed: {exc!r}")
+        return False
+
+
+def set_paused(account_id: str, paused: bool) -> bool:
+    """Flip the Paused checkbox on one Telegram Accounts row — the bot reads
+    this on its own refresh cycle and stops capturing new messages for this
+    person while it's set. Best-effort."""
+    if not (config.NOTION_TOKEN and account_id):
+        return False
+    try:
+        r = _send("PATCH", f"https://api.notion.com/v1/pages/{account_id}",
+                  json={"properties": {"Paused": {"checkbox": bool(paused)}}})
+        return r.status_code == 200
+    except Exception as exc:
+        print(f"[notion_data] set_paused failed: {exc!r}")
         return False
 
 

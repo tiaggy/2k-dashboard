@@ -105,6 +105,7 @@
     const firstDate = new Map(); // name -> earliest date ISO seen this year
     const accountIdByName = new Map();
     const hiddenByName = new Map();
+    const pausedByName = new Map();
     for (const week of team.weeks) {
       for (const w of week.table.workers) {
         const days = Object.keys(w.days);
@@ -114,6 +115,7 @@
         if (!prev || earliest < prev) firstDate.set(w.name, earliest);
         if (!accountIdByName.has(w.name)) accountIdByName.set(w.name, w.account_id);
         if (w.hidden) hiddenByName.set(w.name, true);
+        if (w.paused) pausedByName.set(w.name, true);
       }
     }
     const names = [...firstDate.keys()].sort((a, b) => {
@@ -196,10 +198,17 @@
       const nameTd = document.createElement("td");
       nameTd.className = "worker-name";
       nameTd.textContent = name;
+      if (pausedByName.get(name)) {
+        const badge = document.createElement("span");
+        badge.className = "paused-badge";
+        badge.textContent = "⏸";
+        badge.title = "Tracking paused — the bot isn't capturing new messages for this person";
+        nameTd.appendChild(badge);
+      }
       nameTd.title = "Click for a summary of this year's days";
       nameTd.addEventListener("click", (e) => {
         e.stopPropagation();
-        openInfoCard(nameTd, team, name, colors, legend, accountIdByName.get(name), !!hiddenByName.get(name));
+        openInfoCard(nameTd, team, name, colors, legend, accountIdByName.get(name), !!hiddenByName.get(name), !!pausedByName.get(name));
       });
       tr.appendChild(nameTd);
       const accountId = accountIdByName.get(name);
@@ -414,7 +423,7 @@
     return counts;
   }
 
-  function openInfoCard(anchorEl, team, name, colors, legend, accountId, hidden) {
+  function openInfoCard(anchorEl, team, name, colors, legend, accountId, hidden, paused) {
     closePicker();
     const counts = tallyForWorker(team, name);
     const card = document.createElement("div");
@@ -447,8 +456,19 @@
       hideBtn.type = "button";
       hideBtn.className = "info-card-hide-btn";
       hideBtn.textContent = hidden ? "Show this person" : "Hide this person";
+      hideBtn.title = "Dashboard display only — doesn't affect what the bot captures";
       hideBtn.addEventListener("click", () => submitToggleHidden(accountId, !hidden, hideBtn));
       card.appendChild(hideBtn);
+
+      const pauseBtn = document.createElement("button");
+      pauseBtn.type = "button";
+      pauseBtn.className = "info-card-hide-btn info-card-pause-btn";
+      pauseBtn.textContent = paused ? "Resume tracking" : "Pause tracking";
+      pauseBtn.title = paused
+        ? "The bot will start capturing new messages for this person again"
+        : "Stops the bot from capturing new messages for this person — their history is untouched";
+      pauseBtn.addEventListener("click", () => submitTogglePaused(accountId, !paused, pauseBtn));
+      card.appendChild(pauseBtn);
     }
     showPopover(card, anchorEl);
   }
@@ -563,6 +583,52 @@
       closePicker();
       if (lastData) {
         patchHiddenInData(lastData, accountId, hidden);
+        render(lastData);
+      }
+    } catch (err) {
+      alert("Failed: " + err);
+    } finally {
+      btnEl.disabled = false;
+    }
+  }
+
+  function patchPausedInData(data, accountId, paused) {
+    for (const yearData of Object.values(data.years)) {
+      for (const team of yearData.teams) {
+        for (const week of team.weeks) {
+          for (const w of week.table.workers) {
+            if (w.account_id === accountId) w.paused = paused;
+          }
+        }
+      }
+    }
+  }
+
+  async function submitTogglePaused(accountId, paused, btnEl) {
+    btnEl.disabled = true;
+    try {
+      const token = localStorage.getItem(TOKEN_KEY) || "";
+      const res = await fetch("/api/toggle-paused", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Approve-Token": token },
+        body: JSON.stringify({ account_id: accountId, paused }),
+      });
+      if (res.status === 401) {
+        showTokenBanner(() => submitTogglePaused(accountId, paused, btnEl));
+        return;
+      }
+      if (res.status === 403) {
+        alert("Editing is disabled on this server (no token configured).");
+        return;
+      }
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        alert("Failed: " + (d.detail || res.status));
+        return;
+      }
+      closePicker();
+      if (lastData) {
+        patchPausedInData(lastData, accountId, paused);
         render(lastData);
       }
     } catch (err) {

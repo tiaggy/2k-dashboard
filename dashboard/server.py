@@ -97,7 +97,8 @@ def _compute_week_table(group_id: str, group_records: dict, accounts: dict, week
         acc = accounts.get(apid, {})
         name = acc.get("name") or acc.get("username") or apid[:8]
         workers.append({"name": name, "username": acc.get("username"), "account_id": apid,
-                        "hidden": bool(acc.get("hidden")), "days": week_codes})
+                        "hidden": bool(acc.get("hidden")), "paused": bool(acc.get("paused")),
+                        "days": week_codes})
     workers.sort(key=lambda w: w["name"].lower())
     return {"days": day_isos, "workers": workers}
 
@@ -390,4 +391,34 @@ async def api_toggle_hidden(request: Request, x_approve_token: str = Header(defa
                         for worker in week["table"]["workers"]:
                             if worker.get("account_id") == account_id:
                                 worker["hidden"] = hidden
+    return {"ok": True}
+
+
+@app.post("/api/toggle-paused")
+async def api_toggle_paused(request: Request, x_approve_token: str = Header(default="")):
+    _require_token(x_approve_token)
+
+    body = await request.json()
+    account_id = body.get("account_id")
+    paused = bool(body.get("paused"))
+    if not account_id:
+        raise HTTPException(status_code=400, detail="account_id is required")
+
+    ok = notion_data.set_paused(account_id, paused)
+    if not ok:
+        raise HTTPException(status_code=502, detail="failed to write to Notion")
+
+    # Reflect immediately across every year/team/week this account appears in,
+    # same as /api/toggle-hidden — the bot itself only picks this up on its
+    # own next config refresh, but the dashboard's own view of it can update
+    # right away.
+    with _state_lock:
+        snapshot = _state["snapshot"]
+        if snapshot:
+            for year_data in snapshot["years"].values():
+                for team in year_data["teams"]:
+                    for week in team["weeks"]:
+                        for worker in week["table"]["workers"]:
+                            if worker.get("account_id") == account_id:
+                                worker["paused"] = paused
     return {"ok": True}

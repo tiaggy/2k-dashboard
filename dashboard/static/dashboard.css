@@ -209,6 +209,7 @@ body {
   cursor: pointer;
 }
 .team-table .worker-name:hover { text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 2px; }
+.paused-badge { margin-left: 5px; font-size: 10px; opacity: 0.85; cursor: help; }
 .team-table tbody tr:hover td { background: color-mix(in srgb, var(--accent) 5%, transparent); }
 .team-table tbody tr:hover .worker-name { background: color-mix(in srgb, var(--accent) 8%, var(--surface-raised)); }
 
@@ -305,6 +306,7 @@ body {
 }
 .info-card-hide-btn:hover { color: var(--accent); }
 .info-card-hide-btn:disabled { opacity: 0.5; cursor: default; }
+.info-card-pause-btn { margin-top: 0; padding-top: 4px; border-top: none; }
 
 .empty-note { color: var(--text-muted); font-size: 13px; padding: 24px 4px; }
 
