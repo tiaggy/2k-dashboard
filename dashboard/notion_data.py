@@ -61,7 +61,10 @@ def _row_date(props: dict) -> dt.date | None:
 
 
 def load_accounts() -> dict:
-    """{page_id: {'name': str|None, 'username': str|None}}."""
+    """{page_id: {'name': str|None, 'username': str|None, 'hidden': bool}}.
+    `hidden` is a manual per-person flag (Telegram Accounts -> Hidden
+    checkbox) letting someone be excluded from the dashboard's tables
+    without touching their real attendance data."""
     out: dict = {}
     if not config.NOTION_ACCOUNTS_DB_ID:
         return out
@@ -69,8 +72,22 @@ def load_accounts() -> dict:
         p = pg.get("properties", {})
         name = "".join(t.get("plain_text", "") for t in (p.get("Name", {}).get("title") or []))
         username = "".join(t.get("plain_text", "") for t in (p.get("Username", {}).get("rich_text") or []))
-        out[pg["id"]] = {"name": name or None, "username": username or None}
+        hidden = bool((p.get("Hidden", {}) or {}).get("checkbox"))
+        out[pg["id"]] = {"name": name or None, "username": username or None, "hidden": hidden}
     return out
+
+
+def set_hidden(account_id: str, hidden: bool) -> bool:
+    """Flip the Hidden checkbox on one Telegram Accounts row. Best-effort."""
+    if not (config.NOTION_TOKEN and account_id):
+        return False
+    try:
+        r = _send("PATCH", f"https://api.notion.com/v1/pages/{account_id}",
+                  json={"properties": {"Hidden": {"checkbox": bool(hidden)}}})
+        return r.status_code == 200
+    except Exception as exc:
+        print(f"[notion_data] set_hidden failed: {exc!r}")
+        return False
 
 
 def load_groups() -> dict:

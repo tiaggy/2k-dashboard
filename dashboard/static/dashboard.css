@@ -110,6 +110,21 @@ body {
   border-bottom: 2px solid var(--accent);
   display: inline-block;
 }
+.hidden-toggle {
+  display: block;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  padding: 0 0 8px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+}
+.hidden-toggle:hover { color: var(--accent); }
+.worker-row-hidden .worker-name { opacity: 0.55; font-style: italic; }
+.worker-row-hidden td { opacity: 0.55; }
 
 .table-scroll {
   overflow-x: auto;
@@ -274,6 +289,22 @@ body {
 }
 .info-card-label { flex: 1; color: var(--text-secondary); }
 .info-card-count { font-weight: 700; min-width: 1.5em; text-align: right; }
+.info-card-hide-btn {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding-top: 8px;
+  border: none;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.info-card-hide-btn:hover { color: var(--accent); }
+.info-card-hide-btn:disabled { opacity: 0.5; cursor: default; }
 
 .empty-note { color: var(--text-muted); font-size: 13px; padding: 24px 4px; }
 

@@ -96,7 +96,8 @@ def _compute_week_table(group_id: str, group_records: dict, accounts: dict, week
             continue  # this worker wasn't active this particular week
         acc = accounts.get(apid, {})
         name = acc.get("name") or acc.get("username") or apid[:8]
-        workers.append({"name": name, "username": acc.get("username"), "account_id": apid, "days": week_codes})
+        workers.append({"name": name, "username": acc.get("username"), "account_id": apid,
+                        "hidden": bool(acc.get("hidden")), "days": week_codes})
     workers.sort(key=lambda w: w["name"].lower())
     return {"days": day_isos, "workers": workers}
 
@@ -360,4 +361,33 @@ async def api_edit_day(request: Request, x_approve_token: str = Header(default="
                     worker["days"][date_str] = code
                 else:
                     worker["days"].pop(date_str, None)
+    return {"ok": True}
+
+
+@app.post("/api/toggle-hidden")
+async def api_toggle_hidden(request: Request, x_approve_token: str = Header(default="")):
+    _require_token(x_approve_token)
+
+    body = await request.json()
+    account_id = body.get("account_id")
+    hidden = bool(body.get("hidden"))
+    if not account_id:
+        raise HTTPException(status_code=400, detail="account_id is required")
+
+    ok = notion_data.set_hidden(account_id, hidden)
+    if not ok:
+        raise HTTPException(status_code=502, detail="failed to write to Notion")
+
+    # Reflect immediately across every year/team/week this account appears in,
+    # rather than waiting for the next refresh cycle — a hide/show toggle
+    # affects every occurrence of this person, not just one cell.
+    with _state_lock:
+        snapshot = _state["snapshot"]
+        if snapshot:
+            for year_data in snapshot["years"].values():
+                for team in year_data["teams"]:
+                    for week in team["weeks"]:
+                        for worker in week["table"]["workers"]:
+                            if worker.get("account_id") == account_id:
+                                worker["hidden"] = hidden
     return {"ok": True}

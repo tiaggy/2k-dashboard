@@ -15,6 +15,7 @@
   let legendRendered = false;
   let selectedYear = null;   // string, e.g. "2026" — set once data first arrives
   let centeredYear = null;   // which year we've already auto-centered on load
+  let showHiddenByTeam = new Map();  // group_id -> bool, persisted across renders
 
   function fmtMonth(dateIso) {
     return new Date(dateIso + "T00:00:00").toLocaleDateString(undefined, { month: "short" });
@@ -103,6 +104,7 @@
     // alphabetically among workers who started the same day.
     const firstDate = new Map(); // name -> earliest date ISO seen this year
     const accountIdByName = new Map();
+    const hiddenByName = new Map();
     for (const week of team.weeks) {
       for (const w of week.table.workers) {
         const days = Object.keys(w.days);
@@ -111,6 +113,7 @@
         const prev = firstDate.get(w.name);
         if (!prev || earliest < prev) firstDate.set(w.name, earliest);
         if (!accountIdByName.has(w.name)) accountIdByName.set(w.name, w.account_id);
+        if (w.hidden) hiddenByName.set(w.name, true);
       }
     }
     const names = [...firstDate.keys()].sort((a, b) => {
@@ -118,6 +121,22 @@
       if (da !== db) return da < db ? -1 : 1;
       return a.toLowerCase().localeCompare(b.toLowerCase());
     });
+    const hiddenCount = names.filter((n) => hiddenByName.get(n)).length;
+    const showHidden = showHiddenByTeam.get(team.group_id) || false;
+    const displayNames = showHidden ? names : names.filter((n) => !hiddenByName.get(n));
+
+    const scrollDiv = node.querySelector(".table-scroll");
+    if (hiddenCount > 0) {
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "hidden-toggle";
+      toggle.textContent = `${hiddenCount} hidden — ${showHidden ? "hide" : "show"}`;
+      toggle.addEventListener("click", () => {
+        showHiddenByTeam.set(team.group_id, !showHidden);
+        if (lastData) render(lastData);
+      });
+      scrollDiv.parentNode.insertBefore(toggle, scrollDiv);
+    }
 
     const weekLookup = team.weeks.map((week) => {
       const m = new Map();
@@ -156,7 +175,7 @@
       });
     }
 
-    if (names.length === 0) {
+    if (displayNames.length === 0) {
       // Nothing to close the today-column rectangle at the bottom with —
       // close it off at the header instead so it doesn't look cut open.
       dowRow.querySelectorAll(".today-col").forEach((th) => th.classList.add("today-col-bottom"));
@@ -170,16 +189,17 @@
       return;
     }
 
-    names.forEach((name, rowIdx) => {
-      const isLastRow = rowIdx === names.length - 1;
+    displayNames.forEach((name, rowIdx) => {
+      const isLastRow = rowIdx === displayNames.length - 1;
       const tr = document.createElement("tr");
+      if (hiddenByName.get(name)) tr.classList.add("worker-row-hidden");
       const nameTd = document.createElement("td");
       nameTd.className = "worker-name";
       nameTd.textContent = name;
       nameTd.title = "Click for a summary of this year's days";
       nameTd.addEventListener("click", (e) => {
         e.stopPropagation();
-        openInfoCard(nameTd, team, name, colors, legend);
+        openInfoCard(nameTd, team, name, colors, legend, accountIdByName.get(name), !!hiddenByName.get(name));
       });
       tr.appendChild(nameTd);
       const accountId = accountIdByName.get(name);
@@ -394,7 +414,7 @@
     return counts;
   }
 
-  function openInfoCard(anchorEl, team, name, colors, legend) {
+  function openInfoCard(anchorEl, team, name, colors, legend, accountId, hidden) {
     closePicker();
     const counts = tallyForWorker(team, name);
     const card = document.createElement("div");
@@ -421,6 +441,14 @@
       countSpan.textContent = String(counts[code] || 0);
       row.appendChild(countSpan);
       card.appendChild(row);
+    }
+    if (accountId) {
+      const hideBtn = document.createElement("button");
+      hideBtn.type = "button";
+      hideBtn.className = "info-card-hide-btn";
+      hideBtn.textContent = hidden ? "Show this person" : "Hide this person";
+      hideBtn.addEventListener("click", () => submitToggleHidden(accountId, !hidden, hideBtn));
+      card.appendChild(hideBtn);
     }
     showPopover(card, anchorEl);
   }
@@ -495,6 +523,52 @@
     } catch (err) {
       if (cellEl) applyCellVisual(cellEl, prevCode, colors);
       alert("Failed: " + err);
+    }
+  }
+
+  function patchHiddenInData(data, accountId, hidden) {
+    for (const yearData of Object.values(data.years)) {
+      for (const team of yearData.teams) {
+        for (const week of team.weeks) {
+          for (const w of week.table.workers) {
+            if (w.account_id === accountId) w.hidden = hidden;
+          }
+        }
+      }
+    }
+  }
+
+  async function submitToggleHidden(accountId, hidden, btnEl) {
+    btnEl.disabled = true;
+    try {
+      const token = localStorage.getItem(TOKEN_KEY) || "";
+      const res = await fetch("/api/toggle-hidden", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Approve-Token": token },
+        body: JSON.stringify({ account_id: accountId, hidden }),
+      });
+      if (res.status === 401) {
+        showTokenBanner(() => submitToggleHidden(accountId, hidden, btnEl));
+        return;
+      }
+      if (res.status === 403) {
+        alert("Editing is disabled on this server (no token configured).");
+        return;
+      }
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        alert("Failed: " + (d.detail || res.status));
+        return;
+      }
+      closePicker();
+      if (lastData) {
+        patchHiddenInData(lastData, accountId, hidden);
+        render(lastData);
+      }
+    } catch (err) {
+      alert("Failed: " + err);
+    } finally {
+      btnEl.disabled = false;
     }
   }
 
